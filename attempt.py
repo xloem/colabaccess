@@ -1,6 +1,5 @@
 import os
 
-from xvfbwrapper import Xvfb
 from selenium import webdriver
 from webdriver_setup import get_webdriver_for
 from pyshadow.main import Shadow
@@ -11,22 +10,13 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-#class EC_text_changed_from:
-#    def __init__(self, locator, text):
-#        self.locator = locator
-#        self.text = text
-#
-#    def __call__(self, driver):
-#        actual_text = _find_element(driver, self.locator).text
-#        return actual_text != self.text
-
 class GoogleDriver:
-    SIGNINGIN_EEMENT_ID = 'captchaimg'
+    SIGNINGIN_ELEMENT_ID = 'captchaimg'
     SIGNEDIN_ELEMENT_ID = 'wiz_jd'
-    def __init__(self, engine = 'firefox', dir = '~/.config/google-webdriver'):
+    def __init__(self, engine = 'firefox', dir = os.path.join('~','.config','google-webdriver')):
         dir = os.path.expanduser(dir)
         self.engine = engine
-        self.dir = dir
+        self.dir = os.path.join(dir, self.engine)
         self.create()
     def create(self):
         os.makedirs(self.dir, exist_ok=True)
@@ -38,11 +28,11 @@ class GoogleDriver:
             self.webdriver = get_webdriver_for('firefox', options=options)
             self.webdriver.get('https://accounts.google.com/')
             WebDriverWait(self.webdriver, 10).until(EC.presence_of_element_located((By.ID, 'base-js')))
-            if self.webdriver.find_elements_by_id('captchaimg'):
+            if self.webdriver.find_elements_by_id(GoogleDriver.SIGNINGIN_ELEMENT_ID):
                 # not logged in
                 raise Exception('Not logged in.  Please run this, login, exit, and try again: XRE_PROFILE_PATH="' + self.dir + '" firefox')
-            elif not self.webdriver.find_elements_by_id('wiz_jd'):
-                raise Exception("element ids unrecognised, please update SIGNING_IN_ELEMENT_ID and SIGNED_IN_ELEMENT_ID in source code to reflect element ids that indicate needing to sign or, or being signed in, at https://accounts.google.com/ .  Ids in a page can be found in the developer console in a web browser using hardcoded element ids in source code using: console.log(JSON.stringify(Array.prototype.map.call(document.querySelectorAll('*[id]'), x=>x.id)))")
+            elif not self.webdriver.find_elements_by_id(GoogleDriver.SIGNEDIN_ELEMENT_ID):
+                raise Exception("element ids unrecognised, please update SIGNINGIN_ELEMENT_ID and SIGNEDIN_ELEMENT_ID in source code to reflect element ids that indicate needing to sign or, or being signed in, at https://accounts.google.com/ .  Ids in a page can be found in the developer console in a web browser using hardcoded element ids in source code using: console.log(JSON.stringify(Array.prototype.map.call(document.querySelectorAll('*[id]'), x=>x.id)))")
         #elif engine == 'chrome':
         #    options = webdriver.ChromeOptions()
         #    options.
@@ -54,8 +44,6 @@ class GoogleDriver:
         #self.xvfb.start()
         #self.webdriver = webdriver.Chrome(options=chrome_options)
         #self.webdriver.get('https://accounts.google.com/')
-        ## element ids when not signed in: ["base-js", "yDmH0d", "initialView", "logo", "qaEJec", "YGlOvc", "BWfIk", "e6m3fd", "vbkDmc", "idEJde", "view_container", "headingText", "headingSubtext", "identifierId", "captchaimg", "playCaptchaButton", "captchaAudio", "ca", "ct", "identifierNext", "lang-chooser", "pstMsg", "checkConnection", "checkedDomains"]
-        ## element ids when signed in: ["base-js","yDmH0d","gb","sdgBod","tt-i1","tt-i2","gbwa","gb_71","i6","i7","i14","i28","i5","i4","i3","ZCHFDb","_ij","wiz_jd","tt-i1-visible-label"]
         #if 'Sign' in self.webdriver.title:
         #    # WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, 'password')))
         #    self.xvfb.stop()
@@ -97,7 +85,7 @@ class Colab:
 
     def CELL_RUN_STATE(webdriver, cell_element):
         outer = cell_element.find_element_by_tag_name('colab-run-button')
-        inner = shadow.find_element(outer, '
+        #inner = shadow.find_element(outer, '
 
     def GET_CELL_TEXT(cell_element):
         return cell_element.find_element_by_tag_name('textarea').get_attribute('value')
@@ -118,6 +106,7 @@ class Colab:
 
     def GENERATE_CELL_OUTPUT(webdriver, cell_element):
         last_output = None
+        next_output = None
         def output_changed():
             nonlocal last_output, next_output
             next_output = Colab.GET_CELL_OUTPUT(webdriver, cell_element)   
