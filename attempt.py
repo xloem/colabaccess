@@ -90,10 +90,14 @@ class Colab:
     def INSERT_CELL_BELOW_CURRENT(webdriver):
         webdriver.find_element_by_id('toolbar-add-code').click()
 
-    def RUN_CELL(webdriver, cell_element):
+    def RUN_CELL(webdriver, shadow, cell_element):
         outer = cell_element.find_element_by_tag_name('colab-run-button')
-        inner = Shadow(webdriver).find_element(outer, '.cell-execution')
+        inner = shadow.find_element(outer, '.cell-execution')
         inner.click()
+
+    def CELL_RUN_STATE(webdriver, cell_element):
+        outer = cell_element.find_element_by_tag_name('colab-run-button')
+        inner = shadow.find_element(outer, '
 
     def GET_CELL_TEXT(cell_element):
         return cell_element.find_element_by_tag_name('textarea').get_attribute('value')
@@ -174,7 +178,7 @@ class Colab:
             self.colab = colab
             self.element = element
         def run(self):
-            Colab.RUN_CELL(self.colab.webdriver, self.element)
+            Colab.RUN_CELL(self.colab.webdriver, self.colab.shadow, self.element)
         @property
         def text(self):
             return Colab.GET_CELL_TEXT(self.element)
@@ -189,6 +193,7 @@ class Colab:
         self.webdriver = googledriver.webdriver
         self.webdriver.get(Colab.BASEURL())
         self._wait_for_loaded()
+        self.shadow = Shadow(self.webdriver)
     def new_notebook(self):
         Colab.NEW_NOTEBOOK(self.webdriver)
         self._wait_for_loaded()
