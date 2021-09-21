@@ -11,6 +11,15 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+#class EC_text_changed_from:
+#    def __init__(self, locator, text):
+#        self.locator = locator
+#        self.text = text
+#
+#    def __call__(self, driver):
+#        actual_text = _find_element(driver, self.locator).text
+#        return actual_text != self.text
+
 class GoogleDriver:
     SIGNINGIN_EEMENT_ID = 'captchaimg'
     SIGNEDIN_ELEMENT_ID = 'wiz_jd'
@@ -89,15 +98,33 @@ class Colab:
     def GET_CELL_TEXT(cell_element):
         return cell_element.find_element_by_tag_name('textarea').get_attribute('value')
 
-    def GET_CELL_OUTPUT(webdriver, cell_element):
-        print('if this empty after run with clear output probably means still making it, can use Wait')
+    def GET_CELL_OUTPUT_CONTAINER(webdriver, cell_element):
         output = cell_element.find_element_by_class_name('output')
-        return output.find_element_by_tag_name('colab-static-output-renderer').text
-        #iframe = output.find_element_by_tag_name('iframe')
-        #webdriver.switch_to(iframe)
-        #result = webdriver.find_element_by_class_name('output_text').text
-        #webdriver.switch_to.default_content()
-        #return result
+        iframes = output.find_elements_by_tag_name('iframe')
+        if iframes:
+            webdriver.switch_to.frame(iframes[0])
+            result = webdriver.find_element_by_id('output-body')
+            webdriver.switch_to.default_content()
+        else:
+            result = output.find_element_by_tag_name('colab-static-output-renderer')
+        return result
+
+    def GET_CELL_OUTPUT(webdriver, cell_element):
+        return Colab.GET_CELL_OUTPUT_CONTAINER(webdriver, cell_element).text
+
+    def GENERATE_CELL_OUTPUT(webdriver, cell_element):
+        last_output = None
+        def output_changed():
+            nonlocal last_output, next_output
+            next_output = Colab.GET_CELL_OUTPUT(webdriver, cell_element)   
+            return next_output != last_output
+        output_changed()
+        while True:
+            commonprefix = os.path.commonprefix((next_output, last_output))
+            yield next_output[commonprefix:]
+            last_output = next_output
+            WebDriverWait(self.webdriver, 60*60).until(output_changed)
+        
 
     #def GET_CELL_RUNNING(webdriver, cell_element):
     #    runbutton = cell_element.find_element_by_tag_name('colab-run-button')
@@ -142,8 +169,6 @@ class Colab:
         webdriver.find_element_by_class_name('dismiss').click()
 
 
-
-
     class Cell:
         def __init__(self, colab, element):
             self.colab = colab
@@ -167,7 +192,7 @@ class Colab:
     def new_notebook(self):
         Colab.NEW_NOTEBOOK(self.webdriver)
         self._wait_for_loaded()
-        return self.doc_name
+        return self.name
     def insert_cell_below(self):
         Colab.INSERT_CELL_BELOW_CURRENT(self.webdriver)
     @property
@@ -177,9 +202,9 @@ class Colab:
             for cell in Colab.CELL_ELEMENTS(self.webdriver)
         ]
     @property
-    def doc_name(self):
+    def name(self):
         return Colab.GET_NOTEBOOK_NAME(self.webdriver)
-    @doc_name.setter
+    @name.setter
     def doc_name(self, name):
         Colab.SET_NOTEBOOK_NAME(self.webdriver, name)
     def _wait_for_loaded(self):
