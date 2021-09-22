@@ -83,12 +83,16 @@ class Colab:
         inner = shadow.find_element(outer, '.cell-execution')
         inner.click()
 
-    def CELL_RUN_STATE(webdriver, cell_element):
+    def IS_RUN_COMPLETE(webdriver, shadow, cell_element):
         outer = cell_element.find_element_by_tag_name('colab-run-button')
-        #inner = shadow.find_element(outer, '
+        # div id status
+        return bool(shadow.find_element(outer, '#status'))
 
     def GET_CELL_TEXT(cell_element):
-        return cell_element.find_element_by_tag_name('textarea').get_attribute('value')
+        try:
+            return cell_element.find_element_by_tag_name('textarea').get_attribute('value')
+        except:
+            return cell_element.find_element_by_class_name('main-content').text
 
     def GET_CELL_OUTPUT_CONTAINER(webdriver, cell_element):
         output = cell_element.find_element_by_class_name('output')
@@ -98,13 +102,17 @@ class Colab:
             result = webdriver.find_element_by_id('output-body')
             webdriver.switch_to.default_content()
         else:
-            result = output.find_element_by_tag_name('colab-static-output-renderer')
+            renderers = output.find_elements_by_tag_name('colab-static-output-renderer')
+            if renderers:
+                result = renderers[0]
+            else:
+                result = output
         return result
 
     def GET_CELL_OUTPUT(webdriver, cell_element):
         return Colab.GET_CELL_OUTPUT_CONTAINER(webdriver, cell_element).text
 
-    def GENERATE_CELL_OUTPUT(webdriver, cell_element):
+    def GENERATE_CELL_OUTPUT(webdriver, shadow, cell_element):
         last_output = None
         next_output = None
         def output_changed():
@@ -112,16 +120,13 @@ class Colab:
             next_output = Colab.GET_CELL_OUTPUT(webdriver, cell_element)   
             return next_output != last_output
         output_changed()
-        while True:
+        yield next_output
+        last_output = next_output
+        while not Colab.IS_RUN_COMPLETE(webdriver, shadow, cell_element):
             commonprefix = os.path.commonprefix((next_output, last_output))
             yield next_output[commonprefix:]
             last_output = next_output
             WebDriverWait(self.webdriver, 60*60).until(output_changed)
-        
-
-    #def GET_CELL_RUNNING(webdriver, cell_element):
-    #    runbutton = cell_element.find_element_by_tag_name('colab-run-button')
-    #    shadowelem = Shadow(webdriver).get_shadow_element('
 
     def SET_CELL_TEXT(webdriver, cell_element, text):
         editor = cell_element.find_element_by_class_name('monaco-editor')
@@ -154,6 +159,10 @@ class Colab:
             lines.send_keys(char)
             sent += char
         return sent
+
+    def RESTART_RUNTIME(webdriver):
+        webdriver.find_element_by_id('runtime-menu-button').click()
+        webdriver.find_element_by_id('runtime-menu').find_element_by_xpath('//div[@command="restart"]').click()
         
     def OPEN_DIALOG(webdriver):
         webdriver.find_element_by_id('file-menu-button').click()
@@ -161,6 +170,23 @@ class Colab:
     def OPEN_DISMISS(webdriver):
         webdriver.find_element_by_class_name('dismiss').click()
 
+    def A_DIALOG_IS_PRESENT(webdriver):
+        return bool(webdriver.find_elements_by_tag_name('paper-dialog'))
+    def CLOSE_DIALOG(webdriver, shadow):
+        # first wait for buttons to be enabled
+
+        # the aria-disabled attribute of the paper-button elements is 'false' when can be clicked, 'true' when unclickable
+        dialog = webdriver.find_element_by_tag_name('paper-dialog')
+        WebDriverWait(webdriver, 10).until(lambda webdriver: shadow.find_element(dialog, 'paper-button').get_attribute('aria-disabled') != 'true')
+
+        # click button
+        try:
+            shadow.find_element(dialog, '#ok').click()
+        except:
+            shadow.find_element(dialog, '.dismiss').click()
+
+        # wait for dialog to go away
+        WebDriverWait(webdriver, 10).until(lambda webdriver: not Colab.A_DIALOG_IS_PRESENT(webdriver))
 
     class Cell:
         def __init__(self, colab, element):
@@ -168,6 +194,8 @@ class Colab:
             self.element = element
         def run(self):
             Colab.RUN_CELL(self.colab.webdriver, self.colab.shadow, self.element)
+            if Colab.A_DIALOG_IS_PRESENT(self.colab.webdriver):
+                Colab.CLOSE_DIALOG(self.colab.webdriver, self.colab.shadow)
         @property
         def text(self):
             return Colab.GET_CELL_TEXT(self.element)
@@ -177,16 +205,25 @@ class Colab:
         @property
         def output(self):
             return Colab.GET_CELL_OUTPUT(self.colab.webdriver, self.element)
+        @property
+        def stream(self):
+            return Colab.GENERATE_CELL_OUTPUT(self.colab.webdriver, self.colab.shadow, self.element)
             
-    def __init__(self, googledriver):
+    def __init__(self, googledriver, url = None):
+        if url is None:
+            url = Colab.BASEURL()
         self.webdriver = googledriver.webdriver
-        self.webdriver.get(Colab.BASEURL())
-        self._wait_for_loaded()
         self.shadow = Shadow(self.webdriver)
-    def new_notebook(self):
+        self.open(url)
+    def open(self, url):
+        self.webdriver.get(url)
+        self._wait_for_loaded()
+    def new(self):
         Colab.NEW_NOTEBOOK(self.webdriver)
         self._wait_for_loaded()
         return self.name
+    def restart(self):
+        Colab.RESTART_RUNTIME(self.webdriver)
     def insert_cell_below(self):
         Colab.INSERT_CELL_BELOW_CURRENT(self.webdriver)
     @property
