@@ -79,6 +79,7 @@ class Colab:
         webdriver.find_element_by_id('toolbar-add-code').click()
 
     def RUN_CELL(webdriver, shadow, cell_element):
+        cell_element.click()
         outer = cell_element.find_element_by_tag_name('colab-run-button')
         inner = shadow.find_element(outer, '.cell-execution')
         inner.click()
@@ -86,7 +87,7 @@ class Colab:
     def IS_RUN_COMPLETE(webdriver, shadow, cell_element):
         outer = cell_element.find_element_by_tag_name('colab-run-button')
         # div id status
-        return bool(shadow.find_element(outer, '#status'))
+        return bool(shadow.find_elements(outer, '#status'))
 
     def GET_CELL_TEXT(cell_element):
         try:
@@ -124,7 +125,7 @@ class Colab:
         last_output = next_output
         while not Colab.IS_RUN_COMPLETE(webdriver, shadow, cell_element):
             commonprefix = os.path.commonprefix((next_output, last_output))
-            yield next_output[commonprefix:]
+            yield next_output[len(commonprefix):]
             last_output = next_output
             WebDriverWait(self.webdriver, 60*60).until(output_changed)
 
@@ -208,6 +209,16 @@ class Colab:
         @property
         def stream(self):
             return Colab.GENERATE_CELL_OUTPUT(self.colab.webdriver, self.colab.shadow, self.element)
+
+        @property
+        def is_run_complete(self):
+            return Colab.IS_RUN_COMPLETE(self.colab.webdriver, self.colab.shadow, self.element)
+
+        def __str__(self):
+            return self.text + '\n' + self.output
+
+        def __repr__(self):
+            return str(self)
             
     def __init__(self, googledriver, url = None):
         if url is None:
