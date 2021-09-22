@@ -43,7 +43,7 @@ class GoogleDriver:
                 options = selenium.webdriver.ChromeOptions()
                 options.add_argument('--user-data-dir=' + self.dir)
                 #options.add_argument('--enable-logging')
-                #options.headless = True
+                options.headless = True
                 self.webdriver = get_webdriver_for('chrome', options=options)
                 self.webdriver.get('https://accounts.google.com/')
                 WebDriverWait(self.webdriver, 10).until(GoogleDriver._id_exists(GoogleDriver.SIGNINGIN_ELEMENT_IDS + GoogleDriver.SIGNEDIN_ELEMENT_IDS))
@@ -381,7 +381,7 @@ class Colab:
             return Colab.GET_CELL_OUTPUT(self.colab.webdriver, self.element)
         @property
         def imgs(self):
-            return Colab.GET_CELL_OUTPUT_IMGS(self.colab.webdriver, self.element)
+            return Colab.GET_CELL_IMGS(self.colab.webdriver, self.element)
         @property
         def stream(self):
             return Colab.GENERATE_CELL_OUTPUT(self.colab.webdriver, self.colab.shadow, self.element)
