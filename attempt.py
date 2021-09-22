@@ -49,6 +49,7 @@ class GoogleDriver:
         #    self.xvfb.stop()
         #    self.webdriver = webdriver.Chrome(options=chrome_options)
         #    self.webdriver.get('https://accounts.google.com/')
+        return self.webdriver
         
 driver = GoogleDriver()
 
@@ -127,7 +128,7 @@ class Colab:
             commonprefix = os.path.commonprefix((next_output, last_output))
             yield next_output[len(commonprefix):]
             last_output = next_output
-            WebDriverWait(self.webdriver, 60*60).until(output_changed)
+            WebDriverWait(webdriver, 60*60).until(output_changed)
 
     def SET_CELL_TEXT(webdriver, cell_element, text):
         editor = cell_element.find_element_by_class_name('monaco-editor')
@@ -197,6 +198,7 @@ class Colab:
             Colab.RUN_CELL(self.colab.webdriver, self.colab.shadow, self.element)
             if Colab.A_DIALOG_IS_PRESENT(self.colab.webdriver):
                 Colab.CLOSE_DIALOG(self.colab.webdriver, self.colab.shadow)
+            return self.stream
         @property
         def text(self):
             return Colab.GET_CELL_TEXT(self.element)
@@ -223,9 +225,13 @@ class Colab:
     def __init__(self, googledriver, url = None):
         if url is None:
             url = Colab.BASEURL()
+        self.googledriver = googledriver
         self.webdriver = googledriver.webdriver
         self.shadow = Shadow(self.webdriver)
         self.open(url)
+    def reconnect(self):
+        self.googledriver.create()
+        self.webdriver = self.googledriver.webdriver
     def open(self, url):
         self.webdriver.get(url)
         self._wait_for_loaded()
