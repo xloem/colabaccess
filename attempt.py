@@ -43,7 +43,7 @@ class GoogleDriver:
                 options = selenium.webdriver.ChromeOptions()
                 options.add_argument('--user-data-dir=' + self.dir)
                 #options.add_argument('--enable-logging')
-                options.headless = True
+                #options.headless = True
                 self.webdriver = get_webdriver_for('chrome', options=options)
                 self.webdriver.get('https://accounts.google.com/')
                 WebDriverWait(self.webdriver, 10).until(GoogleDriver._id_exists(GoogleDriver.SIGNINGIN_ELEMENT_IDS + GoogleDriver.SIGNEDIN_ELEMENT_IDS))
@@ -111,21 +111,35 @@ class Colab:
         except:
             return cell_element.find_element_by_class_name('main-content').text
 
-    def GET_CELL_OUTPUT(webdriver, cell_element):
+    def TO_CELL_OUTPUT(webdriver, cell_element, handler):
         output = cell_element.find_element_by_class_name('output')
         iframes = output.find_elements_by_tag_name('iframe')
         if iframes:
-            webdriver.switch_to.default_content()
-            webdriver.switch_to.frame(iframes[0])
-            result = webdriver.find_element_by_id('output-body').text
-            webdriver.switch_to.default_content()
+            try:
+                webdriver.switch_to.default_content()
+                webdriver.switch_to.frame(iframes[0])
+                return handler(webdriver.find_element_by_id('output-body'))
+            except:
+                # seems an exception can be thrown when the iframe disappears
+                pass
+            finally:
+                webdriver.switch_to.default_content()
+        renderers = output.find_elements_by_tag_name('colab-static-output-renderer')
+        if renderers:
+            return handler(renderers[0])
         else:
-            renderers = output.find_elements_by_tag_name('colab-static-output-renderer')
-            if renderers:
-                result = renderers[0].text
-            else:
-                result = output.text
-        return result
+            return handler(output)
+
+    def GET_CELL_OUTPUT(webdriver, cell_element):
+        return Colab.TO_CELL_OUTPUT(webdriver, cell_element, lambda element: element.text)
+
+    def GET_CELL_IMGS(webdriver, cell_element):
+        def elem2imgs(elem):
+            return [
+                img.get_attribute('src')
+                for img in elem.find_elements_by_tag_name('img')
+            ]
+        return Colab.TO_CELL_OUTPUT(webdriver, cell_element, elem2imgs)
 
     def GENERATE_CELL_OUTPUT(webdriver, shadow, cell_element):
         last_output = None
@@ -133,15 +147,23 @@ class Colab:
         def output_changed(webdriver):
             nonlocal last_output, next_output
             next_output = Colab.GET_CELL_OUTPUT(webdriver, cell_element)   
-            return next_output != last_output or Colab.IS_RUN_COMPLETE(webdriver, shadow, cell_element)
+            dialog_title = Colab.DIALOG_MESSAGE(webdriver, shadow)
+            if next_output != last_output or Colab.IS_RUN_COMPLETE(webdriver, shadow, cell_element):
+                return True
+            elif dialog_title is not None:
+                Colab.CLOSE_DIALOG(webdriver, shadow)
+                next_output = last_output + dialog_title
+                return True
+            else:
+                return False
         output_changed(webdriver)
         yield next_output
         last_output = next_output
         while not Colab.IS_RUN_COMPLETE(webdriver, shadow, cell_element):
+            WebDriverWait(webdriver, 60*60).until(output_changed)
             commonprefix = os.path.commonprefix((next_output, last_output))
             yield next_output[len(commonprefix):]
             last_output = next_output
-            WebDriverWait(webdriver, 60*60).until(output_changed)
 
     def SET_CELL_TEXT(webdriver, cell_element, text):
         editor = cell_element.find_element_by_class_name('monaco-editor')
@@ -248,7 +270,7 @@ class Colab:
     def RESTART_RUNTIME(webdriver, shadow):
         webdriver.find_element_by_id('runtime-menu-button').click()
         webdriver.find_element_by_id('runtime-menu').find_element_by_xpath('//div[@command="restart"]').click()
-        if Colab.A_DIALOG_IS_PRESENT(webdriver):
+        if Colab.DIALOG_MESSAGE(webdriver, shadow):
             Colab.CLOSE_DIALOG(webdriver, shadow)
         
     def OPEN_DIALOG(webdriver):
@@ -257,8 +279,13 @@ class Colab:
     def OPEN_DISMISS(webdriver):
         webdriver.find_element_by_class_name('dismiss').click()
 
-    def A_DIALOG_IS_PRESENT(webdriver):
-        return bool(webdriver.find_elements_by_tag_name('paper-dialog'))
+    def DIALOG_MESSAGE(webdriver, shadow):
+        try:
+            dialog = webdriver.find_element_by_tag_name('paper-dialog')
+            return shadow.find_element(dialog, 'div').text
+        except:
+            return None
+
     def CLOSE_DIALOG(webdriver, shadow):
         # first wait for buttons to be enabled
 
@@ -273,7 +300,7 @@ class Colab:
             shadow.find_element(dialog, '.dismiss').click()
 
         # wait for dialog to go away
-        WebDriverWait(webdriver, 10).until(lambda webdriver: not Colab.A_DIALOG_IS_PRESENT(webdriver))
+        WebDriverWait(webdriver, 10).until(lambda webdriver: not Colab.DIALOG_MESSAGE(webdriver, shadow))
             
     def __init__(self, url = None, googledriver = None):
         if googledriver is None:
@@ -334,7 +361,7 @@ class Colab:
             self.element = element
         def run(self):
             Colab.RUN_CELL(self.colab.webdriver, self.colab.shadow, self.element)
-            if Colab.A_DIALOG_IS_PRESENT(self.colab.webdriver):
+            if Colab.DIALOG_MESSAGE(self.colab.webdriver, self.colab.shadow):
                 Colab.CLOSE_DIALOG(self.colab.webdriver, self.colab.shadow)
             return self.stream
         @property
@@ -352,9 +379,9 @@ class Colab:
         @property
         def output(self):
             return Colab.GET_CELL_OUTPUT(self.colab.webdriver, self.element)
-        #@property
-        #def imgs(self):
-        #    return Colab.GET_CELL_OUTPUT_IMGS(self.colabe.webdriver, self.element)
+        @property
+        def imgs(self):
+            return Colab.GET_CELL_OUTPUT_IMGS(self.colab.webdriver, self.element)
         @property
         def stream(self):
             return Colab.GENERATE_CELL_OUTPUT(self.colab.webdriver, self.colab.shadow, self.element)
