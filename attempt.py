@@ -51,16 +51,6 @@ class GoogleDriver:
         except selenium.common.exceptions.TimeoutException:
             print(self.webdriver.execute_script('return Array.prototype.map.call(document.querySelectorAll("*[id]"), x=>x.id)'))
             raise Exception("element ids unrecognised, please update SIGNINGIN_ELEMENT_IDS and SIGNEDIN_ELEMENT_IDS in source code to reflect element ids that indicate needing to sign or, or being signed in, at https://accounts.google.com/ .  Ids in a page can be found in the developer console in a web browser using hardcoded element ids in source code using: console.log(JSON.stringify(Array.prototype.map.call(document.querySelectorAll('*[id]'), x=>x.id))).  Here's the current list: " + self.webdriver.execute_script('return Array.prototype.map.call(document.querySelectorAll("*[id]"), x=>x.id)'))
-        #self.xvfb = Xvfb()
-        #chrome_options = selenium.webdriver.ChromeOptions()
-        #self.xvfb.start()
-        #self.webdriver = selenium.webdriver.Chrome(options=chrome_options)
-        #self.webdriver.get('https://accounts.google.com/')
-        #if 'Sign' in self.webdriver.title:
-        #    # WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, 'password')))
-        #    self.xvfb.stop()
-        #    self.webdriver = selenium.webdriver.Chrome(options=chrome_options)
-        #    self.webdriver.get('https://accounts.google.com/')
         return self.webdriver
         
 driver = GoogleDriver('chrome')
