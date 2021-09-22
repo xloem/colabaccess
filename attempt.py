@@ -131,7 +131,7 @@ class Colab:
         def output_changed(webdriver):
             nonlocal last_output, next_output
             next_output = Colab.GET_CELL_OUTPUT(webdriver, cell_element)   
-            return next_output != last_output
+            return next_output != last_output or Colab.IS_RUN_COMPLETE(webdriver, shadow, cell_element)
         output_changed(webdriver)
         yield next_output
         last_output = next_output
@@ -236,7 +236,20 @@ class Colab:
         def __repr__(self):
             return str(self)
             
-    def __init__(self, googledriver, url = None):
+    def __init__(self, url = None, googledriver = None):
+        if googledriver is None:
+            import random
+            engines = ['chrome', 'firefox']
+            random.shuffle(engines)
+            exception = None
+            for engine in engines:
+                try:
+                    googledriver = GoogleDriver(engine)
+                    break
+                except Exception as exception:
+                    continue
+            if exception is not None:
+                raise exception
         if url is None:
             url = Colab.BASEURL()
         self.googledriver = googledriver
@@ -246,7 +259,9 @@ class Colab:
     def reconnect(self):
         self.googledriver.create()
         self.webdriver = self.googledriver.webdriver
+        self.open(self.url)
     def open(self, url):
+        self.url = url
         self.webdriver.get(url)
         self._wait_for_loaded()
     def new(self):
