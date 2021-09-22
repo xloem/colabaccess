@@ -11,13 +11,16 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 class GoogleDriver:
+    DEFAULT_DIR = os.path.join('~', '.config', 'google-webdriver')
     SIGNINGIN_ELEMENT_IDS = ['captchaimg', 'gaia_loginform']
     SIGNEDIN_ELEMENT_IDS = ['wiz_jd']
     def _id_exists(ids):
         def ec(webdriver):
             return any((webdriver.find_elements_by_id(id) for id in ids))
         return ec
-    def __init__(self, engine = 'firefox', dir = os.path.join('~','.config','google-webdriver')):
+    def __init__(self, engine = 'firefox', dir = None):
+        if dir is None:
+            dir = GoogleDriver.DEFAULT_DIR
         dir = os.path.expanduser(dir)
         self.engine = engine
         self.dir = os.path.join(dir, self.engine, '')
@@ -52,9 +55,15 @@ class GoogleDriver:
             print(self.webdriver.execute_script('return Array.prototype.map.call(document.querySelectorAll("*[id]"), x=>x.id)'))
             raise Exception("element ids unrecognised, please update SIGNINGIN_ELEMENT_IDS and SIGNEDIN_ELEMENT_IDS in source code to reflect element ids that indicate needing to sign or, or being signed in, at https://accounts.google.com/ .  Ids in a page can be found in the developer console in a web browser using hardcoded element ids in source code using: console.log(JSON.stringify(Array.prototype.map.call(document.querySelectorAll('*[id]'), x=>x.id))).  Here's the current list: " + self.webdriver.execute_script('return Array.prototype.map.call(document.querySelectorAll("*[id]"), x=>x.id)'))
         return self.webdriver
-        
-driver = GoogleDriver('chrome')
 
+class GoogleDriverChrome(GoogleDriver):
+    def __init__(self, dir = GoogleDriver.DEFAULT_DIR):
+        super().__init__('chrome', dir)
+
+class GoogleDriverFirefox(GoogleDriver):
+    def __init__(self, dir = GoogleDriver.DEFAULT_DIR):
+        super().__init__('firefox', dir)
+        
 class Colab:
     # these are collected here to make them easy to update
     def BASEURL():
@@ -119,11 +128,11 @@ class Colab:
     def GENERATE_CELL_OUTPUT(webdriver, shadow, cell_element):
         last_output = None
         next_output = None
-        def output_changed():
+        def output_changed(webdriver):
             nonlocal last_output, next_output
             next_output = Colab.GET_CELL_OUTPUT(webdriver, cell_element)   
             return next_output != last_output
-        output_changed()
+        output_changed(webdriver)
         yield next_output
         last_output = next_output
         while not Colab.IS_RUN_COMPLETE(webdriver, shadow, cell_element):
@@ -219,7 +228,10 @@ class Colab:
             return Colab.IS_RUN_COMPLETE(self.colab.webdriver, self.colab.shadow, self.element)
 
         def __str__(self):
-            return self.text + '\n' + self.output
+            try:
+                return self.text + '\n' + self.output
+            except:
+                return self.text
 
         def __repr__(self):
             return str(self)
