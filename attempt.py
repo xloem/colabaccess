@@ -111,23 +111,20 @@ class Colab:
         except:
             return cell_element.find_element_by_class_name('main-content').text
 
-    def GET_CELL_OUTPUT_CONTAINER(webdriver, cell_element):
+    def GET_CELL_OUTPUT(webdriver, cell_element):
         output = cell_element.find_element_by_class_name('output')
         iframes = output.find_elements_by_tag_name('iframe')
         if iframes:
             webdriver.switch_to.frame(iframes[0])
-            result = webdriver.find_element_by_id('output-body')
+            result = webdriver.find_element_by_id('output-body').text
             webdriver.switch_to.default_content()
         else:
             renderers = output.find_elements_by_tag_name('colab-static-output-renderer')
             if renderers:
-                result = renderers[0]
+                result = renderers[0].text
             else:
-                result = output
+                result = output.text
         return result
-
-    def GET_CELL_OUTPUT(webdriver, cell_element):
-        return Colab.GET_CELL_OUTPUT_CONTAINER(webdriver, cell_element).text
 
     def GENERATE_CELL_OUTPUT(webdriver, shadow, cell_element):
         last_output = None
@@ -247,9 +244,11 @@ class Colab:
         if bool(state) != Colab.GET_FIELD_CHECKBOX_VALUE(field_element):
             field_element.find_element_by_tag_name('input').click()
 
-    def RESTART_RUNTIME(webdriver):
+    def RESTART_RUNTIME(webdriver, shadow):
         webdriver.find_element_by_id('runtime-menu-button').click()
         webdriver.find_element_by_id('runtime-menu').find_element_by_xpath('//div[@command="restart"]').click()
+        if Colab.A_DIALOG_IS_PRESENT(webdriver):
+            Colab.CLOSE_DIALOG(webdriver, shadow)
         
     def OPEN_DIALOG(webdriver):
         webdriver.find_element_by_id('file-menu-button').click()
@@ -289,6 +288,8 @@ class Colab:
                     continue
             if exception is not None:
                 raise exception
+        elif type(googledriver) is str:
+            googledriver = GoogleDriver(googledriver)
         if url is None:
             url = Colab.BASEURL()
         self.googledriver = googledriver
@@ -308,7 +309,7 @@ class Colab:
         self._wait_for_loaded()
         return self.name
     def restart(self):
-        Colab.RESTART_RUNTIME(self.webdriver)
+        Colab.RESTART_RUNTIME(self.webdriver, self.shadow)
     def insert_cell_below(self):
         Colab.INSERT_CELL_BELOW_CURRENT(self.webdriver)
     @property
