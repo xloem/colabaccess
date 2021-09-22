@@ -115,6 +115,7 @@ class Colab:
         output = cell_element.find_element_by_class_name('output')
         iframes = output.find_elements_by_tag_name('iframe')
         if iframes:
+            webdriver.switch_to.default_content()
             webdriver.switch_to.frame(iframes[0])
             result = webdriver.find_element_by_id('output-body').text
             webdriver.switch_to.default_content()
@@ -351,6 +352,9 @@ class Colab:
         @property
         def output(self):
             return Colab.GET_CELL_OUTPUT(self.colab.webdriver, self.element)
+        #@property
+        #def imgs(self):
+        #    return Colab.GET_CELL_OUTPUT_IMGS(self.colabe.webdriver, self.element)
         @property
         def stream(self):
             return Colab.GENERATE_CELL_OUTPUT(self.colab.webdriver, self.colab.shadow, self.element)
