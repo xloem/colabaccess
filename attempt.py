@@ -1,6 +1,6 @@
 import os
 
-from selenium import webdriver
+import selenium
 from webdriver_setup import get_webdriver_for
 from pyshadow.main import Shadow
 
@@ -11,47 +11,59 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 class GoogleDriver:
-    SIGNINGIN_ELEMENT_ID = 'captchaimg'
-    SIGNEDIN_ELEMENT_ID = 'wiz_jd'
+    SIGNINGIN_ELEMENT_IDS = ['captchaimg', 'gaia_loginform']
+    SIGNEDIN_ELEMENT_IDS = ['wiz_jd']
+    def _id_exists(ids):
+        def ec(webdriver):
+            return any((webdriver.find_elements_by_id(id) for id in ids))
+        return ec
     def __init__(self, engine = 'firefox', dir = os.path.join('~','.config','google-webdriver')):
         dir = os.path.expanduser(dir)
         self.engine = engine
-        self.dir = os.path.join(dir, self.engine)
+        self.dir = os.path.join(dir, self.engine, '')
         self.create()
     def create(self):
         os.makedirs(self.dir, exist_ok=True)
-        if self.engine == 'firefox':
-            options = webdriver.FirefoxOptions()
-            options.profile = self.dir
-            options.headless = True
-            #ff_options.add_argument('--headless')
-            self.webdriver = get_webdriver_for('firefox', options=options)
-            self.webdriver.get('https://accounts.google.com/')
-            WebDriverWait(self.webdriver, 10).until(EC.presence_of_element_located((By.ID, 'base-js')))
-            if self.webdriver.find_elements_by_id(GoogleDriver.SIGNINGIN_ELEMENT_ID):
-                # not logged in
-                raise Exception('Not logged in.  Please run this, login, exit, and try again: XRE_PROFILE_PATH="' + self.dir + '" firefox')
-            elif not self.webdriver.find_elements_by_id(GoogleDriver.SIGNEDIN_ELEMENT_ID):
-                raise Exception("element ids unrecognised, please update SIGNINGIN_ELEMENT_ID and SIGNEDIN_ELEMENT_ID in source code to reflect element ids that indicate needing to sign or, or being signed in, at https://accounts.google.com/ .  Ids in a page can be found in the developer console in a web browser using hardcoded element ids in source code using: console.log(JSON.stringify(Array.prototype.map.call(document.querySelectorAll('*[id]'), x=>x.id)))")
-        #elif engine == 'chrome':
-        #    options = webdriver.ChromeOptions()
-        #    options.
-        else:
-            raise Exception('unimplemented engine:', engine)
+        try:
+            if self.engine == 'firefox':
+                options = selenium.webdriver.FirefoxOptions()
+                options.profile = self.dir
+                options.headless = True
+                #ff_options.add_argument('--headless')
+                self.webdriver = get_webdriver_for('firefox', options=options)
+                self.webdriver.get('https://accounts.google.com/')
+                WebDriverWait(self.webdriver, 10).until(GoogleDriver._id_exists(GoogleDriver.SIGNINGIN_ELEMENT_IDS + GoogleDriver.SIGNEDIN_ELEMENT_IDS))
+                if GoogleDriver._id_exists(GoogleDriver.SIGNINGIN_ELEMENT_IDS)(self.webdriver):
+                    # not logged in
+                    raise Exception('Not logged in.  Please run this, login, exit, and try again: XRE_PROFILE_PATH="' + self.dir + '" firefox https://accounts.google.com')
+            elif self.engine == 'chrome':
+                options = selenium.webdriver.ChromeOptions()
+                options.add_argument('--user-data-dir=' + self.dir)
+                options.headless = True
+                self.webdriver = get_webdriver_for('chrome', options=options)
+                self.webdriver.get('https://accounts.google.com/')
+                WebDriverWait(self.webdriver, 10).until(GoogleDriver._id_exists(GoogleDriver.SIGNINGIN_ELEMENT_IDS + GoogleDriver.SIGNEDIN_ELEMENT_IDS))
+                if GoogleDriver._id_exists(GoogleDriver.SIGNINGIN_ELEMENT_IDS)(self.webdriver):
+                    # not logged in
+                    raise Exception('Not logged in.  Please run this or similar, login, exit, and try again: google-chrome --user-data-dir="' + self.dir + '" https://accounts.google.com')
+            else:
+                raise Exception('unimplemented engine:', engine)
+        except selenium.common.exceptions.TimeoutException:
+            print(self.webdriver.execute_script('return Array.prototype.map.call(document.querySelectorAll("*[id]"), x=>x.id)'))
+            raise Exception("element ids unrecognised, please update SIGNINGIN_ELEMENT_IDS and SIGNEDIN_ELEMENT_IDS in source code to reflect element ids that indicate needing to sign or, or being signed in, at https://accounts.google.com/ .  Ids in a page can be found in the developer console in a web browser using hardcoded element ids in source code using: console.log(JSON.stringify(Array.prototype.map.call(document.querySelectorAll('*[id]'), x=>x.id))).  Here's the current list: " + self.webdriver.execute_script('return Array.prototype.map.call(document.querySelectorAll("*[id]"), x=>x.id)'))
         #self.xvfb = Xvfb()
-        #chrome_options = webdriver.ChromeOptions()
-        #chrome_options.add_argument('--user-data-dir=' + user_data_dir)
+        #chrome_options = selenium.webdriver.ChromeOptions()
         #self.xvfb.start()
-        #self.webdriver = webdriver.Chrome(options=chrome_options)
+        #self.webdriver = selenium.webdriver.Chrome(options=chrome_options)
         #self.webdriver.get('https://accounts.google.com/')
         #if 'Sign' in self.webdriver.title:
         #    # WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, 'password')))
         #    self.xvfb.stop()
-        #    self.webdriver = webdriver.Chrome(options=chrome_options)
+        #    self.webdriver = selenium.webdriver.Chrome(options=chrome_options)
         #    self.webdriver.get('https://accounts.google.com/')
         return self.webdriver
         
-driver = GoogleDriver()
+driver = GoogleDriver('chrome')
 
 class Colab:
     # these are collected here to make them easy to update
