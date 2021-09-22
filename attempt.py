@@ -42,6 +42,7 @@ class GoogleDriver:
             elif self.engine == 'chrome':
                 options = selenium.webdriver.ChromeOptions()
                 options.add_argument('--user-data-dir=' + self.dir)
+                #options.add_argument('--enable-logging')
                 options.headless = True
                 self.webdriver = get_webdriver_for('chrome', options=options)
                 self.webdriver.get('https://accounts.google.com/')
@@ -86,6 +87,9 @@ class Colab:
 
     def CELL_ELEMENTS(webdriver):
         return webdriver.find_elements_by_class_name('cell')
+
+    def FIELD_ELEMENTS(cell_element):
+        return cell_element.find_elements_by_css_selector('colab-form-input,colab-form-dropdown')
 
     def INSERT_CELL_BELOW_CURRENT(webdriver):
         webdriver.find_element_by_id('toolbar-add-code').click()
@@ -173,6 +177,76 @@ class Colab:
             sent += char
         return sent
 
+    def GET_FIELD_NAME(field_element):
+        name = field_element.find_element_by_class_name('formview-namelabel').text
+        if name[-1] == ':':
+            name = name[:-1]
+        return name
+
+    def GET_FIELD_TYPE(elem):
+        if elem.tag_name == 'colab-form-input':
+            if elem.find_elements_by_tag_name('paper-input'):
+                return "INPUT"
+            inputs =  elem.find_elements_by_tag_name('input')
+            if inputs and inputs[0].get_attribute('type') == 'checkbox':
+                return "CHECKBOX"
+        elif elem.tag_name == 'colab-form-dropdown':
+            if elem.find_elements_by_tag_name('select'):
+                return "SELECT"
+            elif elem.find_elements_by_tag_name('paper-input'):
+                return "DROPDOWN"
+        raise Exception('unrecognised field ' + elem.tag_name)
+
+    def GET_FIELD_INPUT_VALUE(shadow, field_element):
+        return shadow.find_element(field_element, 'input').get_attribute('value')
+
+    def SET_FIELD_INPUT_VALUE(shadow, field_element, text):
+        elem = shadow.find_element(field_element, 'input')
+        elem.clear()
+        elem.send_keys(text)
+
+    def GET_FIELD_SELECT_OPTIONS(field_element):
+        elems = field_element.find_element_by_tag_name('select').find_elements_by_tag_name('option')
+        return [elem.text for elem in elems]
+
+    def GET_FIELD_SELECT_VALUE(field_element):
+        return field_element.find_element_by_tag_name('select').get_attribute('value')
+
+    def SET_FIELD_SELECT_VALUE(field_element, text):
+        elems = field_element.find_element_by_tag_name('select').find_elements_by_tag_name('option')
+        for elem in elems:
+            if str(elem.text) == str(text):
+                elem.click()
+                return
+        raise Exception('not an option: ' + str(text))
+
+    def GET_FIELD_DROPDOWN_OPTIONS(webdriver, shadow, field_element):
+        elems = shadow.find_elements(field_element, 'paper-item')
+        return [elem.get_attribute('value') for elem in elems]
+
+    def GET_FIELD_DROPDOWN_VALUE(webdriver, shadow, field_element):
+        return shadow.find_element(field_element, 'input').get_attribute('value')
+
+    def SET_FIELD_DROPDOWN_VALUE(webdriver, shadow, field_element, text):
+        button = shadow.find_element(field_element, 'paper-icon-button')
+        button.click()
+        elems = shadow.find_elements(field_element, 'paper-item')
+        for elem in elems:
+            if str(elem.get_attribute('value')) == str(text):
+                WebDriverWait(webdriver, 10).until(lambda webdriver: elem.get_attribute('aria-disabled') != 'true')
+                shadow.find_element(field_element, 'input').clear()
+                shadow.find_element(field_element, 'input').send_keys(str(text))
+                #elem.click()
+                return
+        raise Exception('not an option: ' + str(text))
+
+    def GET_FIELD_CHECKBOX_VALUE(field_element):
+        return field_element.find_element_by_tag_name('input').get_property('checked')
+
+    def SET_FIELD_CHECKBOX_VALUE(field_element, state : bool):
+        if bool(state) != Colab.GET_FIELD_CHECKBOX_VALUE(field_element):
+            field_element.find_element_by_tag_name('input').click()
+
     def RESTART_RUNTIME(webdriver):
         webdriver.find_element_by_id('runtime-menu-button').click()
         webdriver.find_element_by_id('runtime-menu').find_element_by_xpath('//div[@command="restart"]').click()
@@ -200,41 +274,6 @@ class Colab:
 
         # wait for dialog to go away
         WebDriverWait(webdriver, 10).until(lambda webdriver: not Colab.A_DIALOG_IS_PRESENT(webdriver))
-
-    class Cell:
-        def __init__(self, colab, element):
-            self.colab = colab
-            self.element = element
-        def run(self):
-            Colab.RUN_CELL(self.colab.webdriver, self.colab.shadow, self.element)
-            if Colab.A_DIALOG_IS_PRESENT(self.colab.webdriver):
-                Colab.CLOSE_DIALOG(self.colab.webdriver, self.colab.shadow)
-            return self.stream
-        @property
-        def text(self):
-            return Colab.GET_CELL_TEXT(self.element)
-        @text.setter
-        def text(self, text):
-            return Colab.SET_CELL_TEXT(self.colab.webdriver, self.element, text)
-        @property
-        def output(self):
-            return Colab.GET_CELL_OUTPUT(self.colab.webdriver, self.element)
-        @property
-        def stream(self):
-            return Colab.GENERATE_CELL_OUTPUT(self.colab.webdriver, self.colab.shadow, self.element)
-
-        @property
-        def is_run_complete(self):
-            return Colab.IS_RUN_COMPLETE(self.colab.webdriver, self.colab.shadow, self.element)
-
-        def __str__(self):
-            try:
-                return self.text + '\n' + self.output
-            except:
-                return self.text
-
-        def __repr__(self):
-            return str(self)
             
     def __init__(self, url = None, googledriver = None):
         if googledriver is None:
@@ -286,3 +325,94 @@ class Colab:
         Colab.SET_NOTEBOOK_NAME(self.webdriver, name)
     def _wait_for_loaded(self):
         WebDriverWait(self.webdriver, 10).until(Colab.CONDITIONS_NOTEBOOK_LOADED())
+
+    class Cell:
+        def __init__(self, colab, element):
+            self.colab = colab
+            self.element = element
+        def run(self):
+            Colab.RUN_CELL(self.colab.webdriver, self.colab.shadow, self.element)
+            if Colab.A_DIALOG_IS_PRESENT(self.colab.webdriver):
+                Colab.CLOSE_DIALOG(self.colab.webdriver, self.colab.shadow)
+            return self.stream
+        @property
+        def text(self):
+            return Colab.GET_CELL_TEXT(self.element)
+        @property
+        def fields(self):
+            return [
+                getattr(Colab.Cell, Colab.GET_FIELD_TYPE(element).title() + 'Field')(self, element)
+                for element in Colab.FIELD_ELEMENTS(self.element)
+            ]
+        @text.setter
+        def text(self, text):
+            return Colab.SET_CELL_TEXT(self.colab.webdriver, self.element, text)
+        @property
+        def output(self):
+            return Colab.GET_CELL_OUTPUT(self.colab.webdriver, self.element)
+        @property
+        def stream(self):
+            return Colab.GENERATE_CELL_OUTPUT(self.colab.webdriver, self.colab.shadow, self.element)
+
+        @property
+        def is_run_complete(self):
+            return Colab.IS_RUN_COMPLETE(self.colab.webdriver, self.colab.shadow, self.element)
+
+        def __str__(self):
+            try:
+                return self.text + '\n' + self.output
+            except:
+                return self.text
+
+        def __repr__(self):
+            return str(self)
+
+        class Field:
+            def __init__(self, cell, element):
+                self.cell = cell
+                self.element = element
+            @property
+            def name(self):
+                return Colab.GET_FIELD_NAME(self.element)
+            def __str__(self):
+                return self.name + ': ' + str(self.value)
+            def __repr__(self):
+                return str(self)
+
+        class InputField(Field):
+            @property
+            def value(self):
+                return Colab.GET_FIELD_INPUT_VALUE(self.cell.colab.shadow, self.element)
+            @value.setter
+            def value(self, text):
+                return Colab.SET_FIELD_INPUT_VALUE(self.cell.colab.shadow, self.element, text)
+
+        class SelectField(Field):
+            @property
+            def options(self):
+                return Colab.GET_FIELD_SELECT_OPTIONS(self.element)
+            @property
+            def value(self):
+                return Colab.GET_FIELD_SELECT_VALUE(self.element)
+            @value.setter
+            def value(self, text):
+                return Colab.SET_FIELD_SELECT_VALUE(self.element, text)
+
+        class DropdownField(Field):
+            @property
+            def options(self):
+                return Colab.GET_FIELD_DROPDOWN_OPTIONS(self.cell.colab.webdriver, self.cell.colab.shadow, self.element)
+            @property
+            def value(self):
+                return Colab.GET_FIELD_DROPDOWN_VALUE(self.cell.colab.webdriver, self.cell.colab.shadow, self.element)
+            @value.setter
+            def value(self, text):
+                return Colab.SET_FIELD_DROPDOWN_VALUE(self.cell.colab.webdriver, self.cell.colab.shadow, self.element, text)
+
+        class CheckboxField(Field):
+            @property
+            def value(self):
+                return Colab.GET_FIELD_CHECKBOX_VALUE(self.element)
+            @value.setter
+            def value(self, state : bool):
+                Colab.SET_FIELD_CHECKBOX_VALUE(self.element, state)
